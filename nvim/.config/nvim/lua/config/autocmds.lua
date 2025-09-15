@@ -11,19 +11,6 @@ vim.api.nvim_create_autocmd("BufReadPost", {
   end,
 })
 
--- Highlight the yanked text for 200ms
-local highlight_yank_group = vim.api.nvim_create_augroup("HighlightYank", {})
-vim.api.nvim_create_autocmd("TextYankPost", {
-  group = highlight_yank_group,
-  pattern = "*",
-  callback = function()
-    vim.hl.on_yank({
-      higroup = "IncSearch",
-      timeout = 200,
-    })
-  end,
-})
-
 -- python formatting
 vim.api.nvim_create_autocmd({"BufNewFile", "BufRead"}, {
   pattern = "*.py",
@@ -42,3 +29,25 @@ vim.api.nvim_create_autocmd({"BufNewFile", "BufRead"}, {
     vim.opt.shiftwidth = 2
   end
 })
+
+-- Highlight yanked text (works across 0.8 → 0.10+)
+local highlight_yank_group = vim.api.nvim_create_augroup("HighlightYank", { clear = true })
+
+-- Prefer the long-standing API, fall back to the newer table if present.
+local on_yank = (vim.highlight and vim.highlight.on_yank) or (vim.hl and vim.hl.on_yank)
+
+vim.api.nvim_create_autocmd("TextYankPost", {
+  group = highlight_yank_group,
+  desc = "Briefly highlight on yank",
+  callback = function()
+    if on_yank then
+      -- Wrap in pcall so a random edge case never breaks yank again.
+      pcall(on_yank, {
+        higroup = "IncSearch",  -- not 'hl'
+        timeout = 200,
+        on_visual = true,
+      })
+    end
+  end,
+})
+
