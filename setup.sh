@@ -4,14 +4,81 @@ warn()    { echo "[WARN]  $*"; }
 error()   { echo "[ERROR] $*" >&2; }
 success() { echo "[OK]    $*"; }
 
+# -------------------------- OS Detection ------------------------------------
+detect_os() {
+  case "$(uname -s)" in
+    Linux*)
+      if command -v apt-get &> /dev/null; then
+        echo "ubuntu"
+      elif command -v pkg &> /dev/null; then
+        echo "freebsd"
+      else
+        echo "linux"
+      fi
+      ;;
+    FreeBSD*)
+      echo "freebsd"
+      ;;
+    *)
+      echo "unknown"
+      ;;
+  esac
+}
+
+install_stow() {
+  local os="$1"
+  case "$os" in
+    ubuntu)
+      log "Installing GNU Stow on Ubuntu..."
+      sudo apt update && sudo apt install -y stow
+      ;;
+    freebsd)
+      log "Installing GNU Stow on FreeBSD..."
+      sudo pkg install -y stow
+      ;;
+    *)
+      error "Unsupported operating system: $os"
+      error "Please install GNU Stow manually"
+      return 1
+      ;;
+  esac
+}
+
 # -------------------------- Utilities ---------------------------------------
 check_dependencies() {
+  local os
+  os="$(detect_os)"
+
   if ! command -v stow &> /dev/null; then
-    error "GNU Stow is required but not installed"
-    log "Install with: sudo apt install stow (Debian/Ubuntu) or brew install stow (macOS)"
-    exit 1
+    warn "GNU Stow is not installed"
+    case "$os" in
+      ubuntu)
+        log "Attempting to install GNU Stow via apt..."
+        if install_stow "$os"; then
+          success "GNU Stow installed successfully"
+        else
+          error "Failed to install GNU Stow"
+          exit 1
+        fi
+        ;;
+      freebsd)
+        log "Attempting to install GNU Stow via pkg..."
+        if install_stow "$os"; then
+          success "GNU Stow installed successfully"
+        else
+          error "Failed to install GNU Stow"
+          exit 1
+        fi
+        ;;
+      *)
+        error "GNU Stow is required but not installed"
+        error "Unsupported OS: $os. Please install GNU Stow manually"
+        exit 1
+        ;;
+    esac
+  else
+    success "GNU Stow found"
   fi
-  success "GNU Stow found"
 }
 
 backup_existing_config() {
