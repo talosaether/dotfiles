@@ -47,46 +47,30 @@ install_stow() {
 
 # -------------------------- Utilities ---------------------------------------
 check_dependencies() {
-  local os
-  os="$(detect_os)"
-
-  if ! command -v stow &> /dev/null; then
-    warn "GNU Stow is not installed"
+  if ! command -v stow >/dev/null 2>&1; then
+    error "GNU Stow is required but not installed"
+    os="$(detect_os)"
     case "$os" in
       ubuntu)
-        log "Attempting to install GNU Stow via apt..."
-        if install_stow "$os"; then
-          success "GNU Stow installed successfully"
-        else
-          error "Failed to install GNU Stow"
-          exit 1
-        fi
+        log "Install with: sudo apt install stow"
         ;;
       freebsd)
-        log "Attempting to install GNU Stow via pkg..."
-        if install_stow "$os"; then
-          success "GNU Stow installed successfully"
-        else
-          error "Failed to install GNU Stow"
-          exit 1
-        fi
+        log "Install with: sudo pkg install stow"
         ;;
       *)
-        error "GNU Stow is required but not installed"
-        error "Unsupported OS: $os. Please install GNU Stow manually"
-        exit 1
+        log "Please install GNU Stow manually"
         ;;
     esac
-  else
-    success "GNU Stow found"
+    exit 1
   fi
+  success "GNU Stow found"
 }
 
 backup_existing_config() {
   local config_path="$1"
   local backup_dir="$HOME/.config/dotfiles-backup-$(date +%Y%m%d-%H%M%S)"
 
-  if [[ -e "$config_path" ]]; then
+  if [ -e "$config_path" ]; then
     log "Backing up existing config: $config_path"
     mkdir -p "$backup_dir"
     mv "$config_path" "$backup_dir/"
@@ -114,9 +98,9 @@ install_package() {
   log "Installing $package configuration..."
 
   # Check for conflicts and backup if necessary
-  if [[ "$package" == "nvim" ]]; then
+  if [ "$package" = "nvim" ]; then
     backup_existing_config "$HOME/.config/nvim"
-  elif [[ "$package" == "tmux" ]]; then
+  elif [ "$package" = "tmux" ]; then
     backup_existing_config "$HOME/.config/tmux"
     backup_existing_config "$HOME/.tmux.conf"
   fi
