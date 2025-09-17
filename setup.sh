@@ -1,3 +1,4 @@
+#!/bin/sh
 # -------------------------- Logging -----------------------------------------
 log()     { echo "[INFO]  $(date +'%Y-%m-%d %H:%M:%S') $*"; }
 warn()    { echo "[WARN]  $*"; }
@@ -94,14 +95,18 @@ backup_existing_config() {
 }
 
 detect_packages() {
-  local packages=()
+  packages=""
   for dir in */; do
     dir="${dir%/}"
-    if [[ -d "$dir" && "$dir" != ".git" ]]; then
-      packages+=("$dir")
+    if [ -d "$dir" ] && [ "$dir" != ".git" ]; then
+      if [ -z "$packages" ]; then
+        packages="$dir"
+      else
+        packages="$packages $dir"
+      fi
     fi
   done
-  echo "${packages[@]}"
+  echo "$packages"
 }
 
 install_package() {
@@ -117,7 +122,7 @@ install_package() {
   fi
 
   # Use stow to create symlinks
-  if stow --target="$HOME" --verbose "$package" 2>&1; then
+  if stow --target="$HOME" --verbose "$package"; then
     success "Successfully installed $package"
   else
     error "Failed to install $package"
@@ -126,48 +131,69 @@ install_package() {
 }
 
 setup_dotfiles() {
-  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script_dir="$(cd "$(dirname "$0")" && pwd)"
   cd "$script_dir" || exit 1
 
   log "Detecting available packages..."
-  local packages
-  packages=($(detect_packages))
+  packages="$(detect_packages)"
 
-  if [[ ${#packages[@]} -eq 0 ]]; then
+  if [ -z "$packages" ]; then
     warn "No dotfile packages found"
     return 0
   fi
 
-  log "Found packages: ${packages[*]}"
+  log "Found packages: $packages"
 
   # Install each package
-  local failed_packages=()
-  for package in "${packages[@]}"; do
+  failed_packages=""
+  for package in $packages; do
     if ! install_package "$package"; then
-      failed_packages+=("$package")
+      if [ -z "$failed_packages" ]; then
+        failed_packages="$package"
+      else
+        failed_packages="$failed_packages $package"
+      fi
     fi
   done
 
   # Summary
   echo
-  if [[ ${#failed_packages[@]} -eq 0 ]]; then
+  if [ -z "$failed_packages" ]; then
     success "All packages installed successfully!"
-    log "Installed: ${packages[*]}"
+    log "Installed: $packages"
   else
-    warn "Some packages failed to install: ${failed_packages[*]}"
-    log "Successfully installed: $(printf '%s ' "${packages[@]}" | sed "s/$(printf '%s\|' "${failed_packages[@]}" | sed 's/|$//')//g")"
+    warn "Some packages failed to install: $failed_packages"
+    # Build successful packages list
+    successful=""
+    for package in $packages; do
+      case " $failed_packages " in
+        *" $package "*) ;;
+        *)
+          if [ -z "$successful" ]; then
+            successful="$package"
+          else
+            successful="$successful $package"
+          fi
+          ;;
+      esac
+    done
+    log "Successfully installed: $successful"
   fi
 
   # Post-installation notes
   echo
   log "Post-installation notes:"
-  if [[ " ${packages[*]} " =~ " nvim " ]]; then
-    log "- Neovim: Run 'nvim' to trigger lazy.nvim plugin installation"
-  fi
-  if [[ " ${packages[*]} " =~ " tmux " ]]; then
-    log "- tmux: Install TPM with: git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm"
-    log "- tmux: Press prefix + I (Ctrl-s + I) to install plugins"
-  fi
+  case " $packages " in
+    *" nvim "*)
+      log "- Neovim: Run 'nvim' to trigger lazy.nvim plugin installation"
+      ;;
+  esac
+  case " $packages " in
+    *" tmux "*)
+      log "- tmux: Install TPM with: git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm"
+      log "- tmux: Press prefix + I (Ctrl-s + I) to install plugins"
+      ;;
+  esac
 }
 
 main() {
