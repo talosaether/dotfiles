@@ -97,16 +97,31 @@ install_package() {
   local package="$1"
   log "Installing $package configuration..."
 
-  # Check for conflicts and backup if necessary
+  # Remove existing symlinks first to avoid conflicts
+  stow --target="$HOME" --delete "$package" 2>/dev/null || true
+
+  # Check for conflicts and remove/backup if necessary
   if [ "$package" = "nvim" ]; then
-    backup_existing_config "$HOME/.config/nvim"
+    if [ -e "$HOME/.config/nvim" ] && [ ! -L "$HOME/.config/nvim" ]; then
+      backup_existing_config "$HOME/.config/nvim"
+    elif [ -L "$HOME/.config/nvim" ]; then
+      rm -f "$HOME/.config/nvim"
+    fi
   elif [ "$package" = "tmux" ]; then
-    backup_existing_config "$HOME/.config/tmux"
-    backup_existing_config "$HOME/.tmux.conf"
+    if [ -e "$HOME/.config/tmux" ] && [ ! -L "$HOME/.config/tmux" ]; then
+      backup_existing_config "$HOME/.config/tmux"
+    elif [ -L "$HOME/.config/tmux" ]; then
+      rm -f "$HOME/.config/tmux"
+    fi
+    if [ -e "$HOME/.tmux.conf" ] && [ ! -L "$HOME/.tmux.conf" ]; then
+      backup_existing_config "$HOME/.tmux.conf"
+    elif [ -L "$HOME/.tmux.conf" ]; then
+      rm -f "$HOME/.tmux.conf"
+    fi
   fi
 
-  # Use stow to create symlinks
-  if stow --target="$HOME" --verbose "$package"; then
+  # Use stow to create symlinks, forcing replacement
+  if stow --target="$HOME" --verbose --restow "$package"; then
     success "Successfully installed $package"
   else
     error "Failed to install $package"
@@ -180,10 +195,42 @@ setup_dotfiles() {
   esac
 }
 
+update_repository() {
+  log "Updating dotfiles repository from GitHub..."
+  if git remote get-url origin >/dev/null 2>&1; then
+    if git pull origin main; then
+      success "Repository updated successfully"
+    else
+      error "Failed to pull latest changes"
+      return 1
+    fi
+  else
+    warn "No git remote origin found, skipping update"
+  fi
+}
+
+create_tmux_symlink() {
+  local tmux_config="$HOME/.config/tmux/tmux.conf"
+  local tmux_legacy="$HOME/.tmux.conf"
+
+  if [ -f "$tmux_config" ]; then
+    log "Creating symlink: ~/.tmux.conf -> ~/.config/tmux/tmux.conf"
+    if [ -e "$tmux_legacy" ] && [ ! -L "$tmux_legacy" ]; then
+      backup_existing_config "$tmux_legacy"
+    fi
+    ln -sf "$tmux_config" "$tmux_legacy"
+    success "tmux legacy symlink created"
+  else
+    warn "tmux config not found at $tmux_config, skipping legacy symlink"
+  fi
+}
+
 main() {
   log "Setting up dotfiles..."
+  update_repository
   check_dependencies
   setup_dotfiles
+  create_tmux_symlink
 }
 
 main "$@"
