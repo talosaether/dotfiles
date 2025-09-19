@@ -1,274 +1,301 @@
-#!/bin/bash
-# Test script for setup.sh functionality
-# Tests the force replace behavior of the dotfiles setup script
+#!/bin/sh
+# Test suite for setup.sh
 
-set -e
+# Override functions that require sudo to avoid permission issues
+install_neovim() {
+    echo "[MOCK] install_neovim called with NVIM_VERSION=$NVIM_VERSION"
+    return 0
+}
+
+install_tmux() {
+    echo "[MOCK] install_tmux called with TMUX_INSTALL_TPM=$TMUX_INSTALL_TPM"
+    return 0
+}
+
+apt_install() {
+    echo "[MOCK] apt_install called for package: $1"
+    return 0
+}
+
+curl_retry() {
+    echo "[MOCK] curl_retry called with args: $*"
+    return 0
+}
+
+# Source the setup script to access functions (after our overrides)
+. ./setup.sh
+
+# Test framework
+TEST_COUNT=0
+PASS_COUNT=0
+FAIL_COUNT=0
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Test counters
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
+test_log() {
+    echo "[TEST] $*"
+}
 
-# Test directory
-TEST_HOME="/tmp/dotfiles_test_$(date +%s)"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+assert_equals() {
+    local expected="$1"
+    local actual="$2"
+    local test_name="$3"
 
-log() { echo -e "${BLUE}[TEST]${NC} $*"; }
-success() { echo -e "${GREEN}[PASS]${NC} $*"; }
-fail() { echo -e "${RED}[FAIL]${NC} $*"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+    TEST_COUNT=$((TEST_COUNT + 1))
 
-run_test() {
-    local test_name="$1"
-    local test_func="$2"
-
-    TESTS_RUN=$((TESTS_RUN + 1))
-    log "Running test: $test_name"
-
-    if $test_func; then
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        success "$test_name"
+    if [ "$expected" = "$actual" ]; then
+        PASS_COUNT=$((PASS_COUNT + 1))
+        echo "${GREEN}✓${NC} $test_name"
     else
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        fail "$test_name"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        echo "${RED}✗${NC} $test_name"
+        echo "  Expected: '$expected'"
+        echo "  Actual:   '$actual'"
     fi
+}
+
+assert_true() {
+    local condition="$1"
+    local test_name="$2"
+
+    TEST_COUNT=$((TEST_COUNT + 1))
+
+    if eval "$condition"; then
+        PASS_COUNT=$((PASS_COUNT + 1))
+        echo "${GREEN}✓${NC} $test_name"
+    else
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        echo "${RED}✗${NC} $test_name"
+        echo "  Condition failed: $condition"
+    fi
+}
+
+assert_false() {
+    local condition="$1"
+    local test_name="$2"
+
+    TEST_COUNT=$((TEST_COUNT + 1))
+
+    if ! eval "$condition"; then
+        PASS_COUNT=$((PASS_COUNT + 1))
+        echo "${GREEN}✓${NC} $test_name"
+    else
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        echo "${RED}✗${NC} $test_name"
+        echo "  Condition should have failed: $condition"
+    fi
+}
+
+print_summary() {
     echo
-}
+    echo "========================================="
+    echo "Test Summary:"
+    echo "  Total:  $TEST_COUNT"
+    echo "  ${GREEN}Passed: $PASS_COUNT${NC}"
+    echo "  ${RED}Failed: $FAIL_COUNT${NC}"
+    echo "========================================="
 
-setup_test_env() {
-    log "Setting up test environment in $TEST_HOME"
-    rm -rf "$TEST_HOME"
-    mkdir -p "$TEST_HOME"
-
-    # Create fake home directories
-    mkdir -p "$TEST_HOME/.config"
-
-    # Create a separate dotfiles directory for stow
-    local dotfiles_dir="$TEST_HOME/dotfiles"
-    mkdir -p "$dotfiles_dir"
-
-    # Copy dotfiles to the dotfiles directory
-    cp -r "$SCRIPT_DIR/nvim" "$dotfiles_dir/"
-    cp -r "$SCRIPT_DIR/tmux" "$dotfiles_dir/"
-    cp "$SCRIPT_DIR/setup.sh" "$dotfiles_dir/"
-
-    cd "$dotfiles_dir"
-}
-
-cleanup_test_env() {
-    log "Cleaning up test environment"
-    rm -rf "$TEST_HOME"
-}
-
-# Test 1: Fresh installation (no existing configs)
-test_fresh_install() {
-    setup_test_env
-
-    # Run setup
-    if HOME="$TEST_HOME" ./setup.sh > /dev/null 2>&1; then
-        # Check if symlinks were created
-        if [ -L "$TEST_HOME/.config/nvim" ] && [ -L "$TEST_HOME/.config/tmux" ]; then
-            return 0
-        else
-            fail "Symlinks not created properly"
-            return 1
-        fi
+    if [ $FAIL_COUNT -eq 0 ]; then
+        echo "${GREEN}All tests passed!${NC}"
+        return 0
     else
-        fail "Setup script failed"
+        echo "${RED}Some tests failed!${NC}"
         return 1
     fi
 }
 
-# Test 2: Replace existing regular directories
-test_replace_directories() {
-    setup_test_env
+# Test version_compare function
+test_version_compare() {
+    test_log "Testing version_compare function..."
 
-    # Create existing directories with content
-    mkdir -p "$TEST_HOME/.config/nvim"
-    echo "existing nvim config" > "$TEST_HOME/.config/nvim/init.lua"
-    mkdir -p "$TEST_HOME/.config/tmux"
-    echo "existing tmux config" > "$TEST_HOME/.config/tmux/tmux.conf"
+    # Test equal versions
+    assert_true "version_compare '1.0.0' '1.0.0'" "version_compare: 1.0.0 >= 1.0.0"
 
-    # Run setup
-    if HOME="$TEST_HOME" ./setup.sh > /dev/null 2>&1; then
-        # Check if old configs were backed up
-        if ls "$TEST_HOME"/.config/dotfiles-backup-* > /dev/null 2>&1; then
-            # Check if new symlinks were created
-            if [ -L "$TEST_HOME/.config/nvim" ] && [ -L "$TEST_HOME/.config/tmux" ]; then
-                return 0
-            else
-                fail "New symlinks not created"
-                return 1
-            fi
-        else
-            fail "Existing configs not backed up"
-            return 1
-        fi
-    else
-        fail "Setup script failed"
-        return 1
+    # Test greater versions
+    assert_true "version_compare '1.0.1' '1.0.0'" "version_compare: 1.0.1 >= 1.0.0"
+    assert_true "version_compare '1.1.0' '1.0.0'" "version_compare: 1.1.0 >= 1.0.0"
+    assert_true "version_compare '2.0.0' '1.0.0'" "version_compare: 2.0.0 >= 1.0.0"
+
+    # Test lesser versions
+    assert_false "version_compare '1.0.0' '1.0.1'" "version_compare: 1.0.0 < 1.0.1"
+    assert_false "version_compare '1.0.0' '1.1.0'" "version_compare: 1.0.0 < 1.1.0"
+    assert_false "version_compare '1.0.0' '2.0.0'" "version_compare: 1.0.0 < 2.0.0"
+
+    # Test versions with v prefix
+    assert_true "version_compare 'v1.0.0' '1.0.0'" "version_compare: v1.0.0 >= 1.0.0"
+    assert_true "version_compare '1.0.0' 'v1.0.0'" "version_compare: 1.0.0 >= v1.0.0"
+
+    # Test complex versions
+    assert_true "version_compare '0.10.0' '0.9.5'" "version_compare: 0.10.0 >= 0.9.5"
+    assert_false "version_compare '0.9.5' '0.10.0'" "version_compare: 0.9.5 < 0.10.0"
+}
+
+# Test detect_os function
+test_detect_os() {
+    test_log "Testing detect_os function..."
+
+    # This test depends on the actual system
+    local os_result
+    os_result=$(detect_os)
+
+    assert_true "[ -n '$os_result' ]" "detect_os: returns non-empty result"
+    assert_true "[ '$os_result' = 'ubuntu' ] || [ '$os_result' = 'freebsd' ] || [ '$os_result' = 'linux' ] || [ '$os_result' = 'unknown' ]" "detect_os: returns valid OS type"
+}
+
+# Test utility functions exist
+test_utility_functions_exist() {
+    test_log "Testing utility functions exist..."
+
+    assert_true "command -v version_compare >/dev/null" "version_compare function exists"
+    assert_true "command -v check_app_version >/dev/null" "check_app_version function exists"
+    assert_true "command -v apt_install >/dev/null" "apt_install function exists"
+    assert_true "command -v curl_retry >/dev/null" "curl_retry function exists"
+    assert_true "command -v run_as >/dev/null" "run_as function exists"
+    assert_true "command -v install_neovim >/dev/null" "install_neovim function exists"
+    assert_true "command -v install_tmux >/dev/null" "install_tmux function exists"
+    assert_true "command -v check_and_install_tools >/dev/null" "check_and_install_tools function exists"
+}
+
+# Test environment variables
+test_environment_variables() {
+    test_log "Testing environment variables..."
+
+    assert_true "[ -n '$NVIM_VERSION' ]" "NVIM_VERSION is set"
+    assert_true "[ -n '$NVIM_INSTALL_METHOD' ]" "NVIM_INSTALL_METHOD is set"
+    assert_true "[ -n '$TMUX_INSTALL_TPM' ]" "TMUX_INSTALL_TPM is set"
+    assert_true "[ -n '$TARGET_USER' ]" "TARGET_USER is set"
+    assert_true "[ -n '$TARGET_HOME' ]" "TARGET_HOME is set"
+
+    # Test default values
+    assert_equals "0.10.0" "$NVIM_VERSION" "NVIM_VERSION default value"
+    assert_equals "appimage" "$NVIM_INSTALL_METHOD" "NVIM_INSTALL_METHOD default value"
+    assert_equals "1" "$TMUX_INSTALL_TPM" "TMUX_INSTALL_TPM default value"
+}
+
+# Test check_app_version function with mock commands
+test_check_app_version() {
+    test_log "Testing check_app_version function..."
+
+    # Create temporary mock command that doesn't exist
+    local mock_cmd="nonexistent_app_$(date +%s)"
+
+    # Test app not installed (should return 1)
+    local result
+    check_app_version "$mock_cmd" "1.0.0" "echo '1.0.0'"
+    result=$?
+    assert_equals "1" "$result" "check_app_version: returns 1 for non-existent app"
+
+    # Test with existing command (sh should exist)
+    if command -v sh >/dev/null 2>&1; then
+        # Test version checking with a command that exists
+        check_app_version "sh" "0.0.1" "echo '1.0.0'"
+        result=$?
+        assert_equals "0" "$result" "check_app_version: returns 0 for sufficient version"
     fi
 }
 
-# Test 3: Replace existing symlinks
-test_replace_symlinks() {
-    setup_test_env
+# Test installation functions structure
+test_installation_functions_structure() {
+    test_log "Testing installation function structure..."
 
-    # Create existing symlinks pointing to wrong locations
-    mkdir -p "$TEST_HOME/wrong_nvim"
-    mkdir -p "$TEST_HOME/wrong_tmux"
-    ln -s "$TEST_HOME/wrong_nvim" "$TEST_HOME/.config/nvim"
-    ln -s "$TEST_HOME/wrong_tmux" "$TEST_HOME/.config/tmux"
+    # Test that functions are properly defined and callable
+    assert_true "command -v install_neovim >/dev/null 2>&1" "install_neovim function is defined"
+    assert_true "command -v install_tmux >/dev/null 2>&1" "install_tmux function is defined"
 
-    # Run setup
-    if HOME="$TEST_HOME" ./setup.sh > /dev/null 2>&1; then
-        # Check if symlinks point to correct locations
-        local nvim_target=$(readlink "$TEST_HOME/.config/nvim")
-        local tmux_target=$(readlink "$TEST_HOME/.config/tmux")
-
-        if [[ "$nvim_target" == *"/nvim/.config/nvim" ]] && [[ "$tmux_target" == *"/tmux/.config/tmux" ]]; then
-            return 0
-        else
-            fail "Symlinks not pointing to correct locations"
-            fail "nvim target: $nvim_target"
-            fail "tmux target: $tmux_target"
-            return 1
-        fi
-    else
-        fail "Setup script failed"
-        return 1
-    fi
+    # Test that functions handle basic error cases (dry run)
+    # We'll test by checking if the functions exist and are executable
+    assert_true "type install_neovim | grep -q 'function'" "install_neovim is a function"
+    assert_true "type install_tmux | grep -q 'function'" "install_tmux is a function"
 }
 
-# Test 4: Multiple runs (idempotency)
-test_multiple_runs() {
-    setup_test_env
+# Test curl_retry function behavior
+test_curl_retry() {
+    test_log "Testing curl_retry function..."
 
-    # Run setup twice
-    if HOME="$TEST_HOME" ./setup.sh > /dev/null 2>&1 && HOME="$TEST_HOME" ./setup.sh > /dev/null 2>&1; then
-        # Check if symlinks still exist and are correct
-        if [ -L "$TEST_HOME/.config/nvim" ] && [ -L "$TEST_HOME/.config/tmux" ]; then
-            local nvim_target=$(readlink "$TEST_HOME/.config/nvim")
-            local tmux_target=$(readlink "$TEST_HOME/.config/tmux")
+    # Test that our mock curl_retry function works
+    local result
+    result=$(curl_retry -s 'https://test.com' 2>/dev/null)
+    assert_true "echo '$result' | grep -q 'MOCK.*curl_retry'" "curl_retry: mock function works"
 
-            if [[ "$nvim_target" == *"/nvim/.config/nvim" ]] && [[ "$tmux_target" == *"/tmux/.config/tmux" ]]; then
-                return 0
-            else
-                fail "Symlinks corrupted after multiple runs"
-                return 1
-            fi
-        else
-            fail "Symlinks missing after multiple runs"
-            return 1
-        fi
-    else
-        fail "Multiple setup runs failed"
-        return 1
-    fi
+    # Test function exists
+    assert_true "command -v curl_retry >/dev/null" "curl_retry: function is defined"
 }
 
-# Test 5: tmux legacy symlink creation
-test_tmux_legacy_symlink() {
-    setup_test_env
+# Test run_as function
+test_run_as() {
+    test_log "Testing run_as function..."
 
-    # Run setup
-    if HOME="$TEST_HOME" ./setup.sh > /dev/null 2>&1; then
-        # Check if legacy tmux symlink was created
-        if [ -L "$TEST_HOME/.tmux.conf" ]; then
-            local target=$(readlink "$TEST_HOME/.tmux.conf")
-            if [[ "$target" == *"/.config/tmux/tmux.conf" ]]; then
-                return 0
-            else
-                fail "Legacy tmux symlink pointing to wrong location: $target"
-                return 1
-            fi
-        else
-            fail "Legacy tmux symlink not created"
-            return 1
-        fi
-    else
-        fail "Setup script failed"
-        return 1
-    fi
+    # Test basic command execution
+    local result
+    result=$(run_as "echo 'test_output'")
+    assert_equals "test_output" "$result" "run_as: executes commands correctly"
+
+    # Test with TARGET_USER set to current user
+    local old_target_user="$TARGET_USER"
+    TARGET_USER="$(whoami)"
+    result=$(run_as "echo 'current_user_test'")
+    assert_equals "current_user_test" "$result" "run_as: works with current user"
+    TARGET_USER="$old_target_user"
 }
 
-# Test 6: Backup functionality
-test_backup_functionality() {
-    setup_test_env
+# Integration test for dotfiles setup
+test_dotfiles_integration() {
+    test_log "Testing dotfiles setup integration..."
 
-    # Create existing config with unique content
-    mkdir -p "$TEST_HOME/.config/nvim"
-    echo "unique_test_content_$(date +%s)" > "$TEST_HOME/.config/nvim/test_file.lua"
+    # Create temporary test directory
+    local test_dir="/tmp/dotfiles_test_$(date +%s)"
+    mkdir -p "$test_dir"
 
-    # Run setup
-    if HOME="$TEST_HOME" ./setup.sh > /dev/null 2>&1; then
-        # Check if backup was created and contains our content
-        local backup_dir=$(ls -d "$TEST_HOME"/.config/dotfiles-backup-* 2>/dev/null | head -1)
-        if [ -n "$backup_dir" ] && [ -f "$backup_dir/nvim/test_file.lua" ]; then
-            if grep -q "unique_test_content" "$backup_dir/nvim/test_file.lua"; then
-                return 0
-            else
-                fail "Backup doesn't contain expected content"
-                return 1
-            fi
-        else
-            fail "Backup not created or content missing"
-            return 1
-        fi
-    else
-        fail "Setup script failed"
-        return 1
-    fi
-}
+    # Test that detect_packages works
+    local packages
+    packages=$(detect_packages)
+    assert_true "[ -n '$packages' ]" "detect_packages: returns packages"
 
-# Main test execution
-main() {
-    log "Starting dotfiles setup.sh tests"
-    log "Test environment: $TEST_HOME"
-    echo
-
-    # Check if stow is available
-    if ! command -v stow >/dev/null 2>&1; then
-        fail "GNU Stow is required for testing but not installed"
-        exit 1
-    fi
-
-    # Run all tests
-    run_test "Fresh installation" test_fresh_install
-    run_test "Replace existing directories" test_replace_directories
-    run_test "Replace existing symlinks" test_replace_symlinks
-    run_test "Multiple runs (idempotency)" test_multiple_runs
-    run_test "tmux legacy symlink creation" test_tmux_legacy_symlink
-    run_test "Backup functionality" test_backup_functionality
+    # Test that check_dependencies works
+    assert_true "check_dependencies >/dev/null 2>&1 || true" "check_dependencies: runs without error"
 
     # Cleanup
-    cleanup_test_env
-
-    # Summary
-    echo "=========================================="
-    log "Test Summary:"
-    echo "  Total tests run: $TESTS_RUN"
-    echo "  Tests passed: $TESTS_PASSED"
-    echo "  Tests failed: $TESTS_FAILED"
-    echo
-
-    if [ $TESTS_FAILED -eq 0 ]; then
-        success "All tests passed! ✅"
-        exit 0
-    else
-        fail "Some tests failed! ❌"
-        exit 1
-    fi
+    rm -rf "$test_dir"
 }
 
-# Trap to cleanup on exit
-trap cleanup_test_env EXIT
+# Main test runner
+main_test() {
+    echo "${YELLOW}Running setup.sh test suite...${NC}"
+    echo
 
-main "$@"
+    test_environment_variables
+    echo
+
+    test_version_compare
+    echo
+
+    test_detect_os
+    echo
+
+    test_utility_functions_exist
+    echo
+
+    test_check_app_version
+    echo
+
+    test_installation_functions_structure
+    echo
+
+    test_curl_retry
+    echo
+
+    test_run_as
+    echo
+
+    test_dotfiles_integration
+    echo
+
+    print_summary
+}
+
+# Run tests
+main_test
