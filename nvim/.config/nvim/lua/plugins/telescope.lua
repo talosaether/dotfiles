@@ -12,6 +12,13 @@ return {
     { "<leader>tg", function() require("telescope.builtin").live_grep() end,  desc = "Live grep"  },
     { "<leader>tb", function() require("telescope.builtin").buffers() end,    desc = "Buffers"    },
     { "<leader>th", function() require("telescope.builtin").help_tags() end,  desc = "Help"       },
+
+    -- LSP navigation with hyperlinks
+    { "<leader>ld", function() require("telescope.builtin").lsp_definitions() end, desc = "LSP definitions" },
+    { "<leader>li", function() require("telescope.builtin").lsp_implementations() end, desc = "LSP implementations" },
+    { "<leader>lr", function() require("telescope.builtin").lsp_references() end, desc = "LSP references" },
+    { "<leader>ls", function() require("telescope.builtin").lsp_document_symbols() end, desc = "Document symbols" },
+    { "<leader>lw", function() require("telescope.builtin").lsp_workspace_symbols() end, desc = "Workspace symbols" },
   },
   config = function()
     require("telescope").setup({
