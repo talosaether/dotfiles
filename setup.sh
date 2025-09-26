@@ -92,8 +92,32 @@ check_app_version() {
 
 apt_install() {
   local package="$1"
-  log "Installing $package via apt..."
-  sudo apt update && sudo apt install -y "$package"
+
+  if [ "$package" = "neovim" ]; then
+    log "Installing $package via apt-get..."
+    sudo apt update && sudo apt install -y "$package"
+
+    # Check if installed version meets minimum requirement
+    if command -v nvim >/dev/null 2>&1; then
+      local installed_version
+      installed_version=$(nvim --version | head -n1 | sed 's/.*v//')
+
+      if ! version_compare "$installed_version" "$NVIM_VERSION"; then
+        warn "Installed neovim v$installed_version is below minimum requirement (v${NVIM_VERSION})"
+        log "Installing neovim from unstable PPA..."
+        sudo add-apt-repository ppa:neovim-ppa/unstable -y
+        sudo apt update && sudo apt install -y "$package"
+      else
+        success "Neovim v$installed_version meets minimum requirement"
+      fi
+    else
+      error "Neovim installation failed"
+      return 1
+    fi
+  else
+    log "Installing $package via apt..."
+    sudo apt update && sudo apt install -y "$package"
+  fi
 }
 
 curl_retry() {

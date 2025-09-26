@@ -14,7 +14,8 @@ return {
         "lua_ls",
         "pyright",
         "ts_ls", -- Updated from tsserver
-        "rust_analyzer"
+        "rust_analyzer",
+        "bashls"
         -- gopls removed - requires Go to be installed
       },
       automatic_installation = true,
@@ -56,7 +57,7 @@ return {
     end
 
     -- Configure common language servers using new vim.lsp.config API
-    local servers = { "lua_ls", "pyright", "ts_ls", "rust_analyzer" }
+    local servers = { "lua_ls", "pyright", "ts_ls", "rust_analyzer", "bashls" }
     for _, server in ipairs(servers) do
       vim.lsp.config(server, {
         capabilities = capabilities,
