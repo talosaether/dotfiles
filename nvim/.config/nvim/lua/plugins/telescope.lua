@@ -29,7 +29,22 @@ return {
             ["<C-d>"] = false,
           },
         },
+        -- Search more files including hidden ones
+        file_ignore_patterns = {
+          "%.git/",  -- Still ignore .git directory
+          "node_modules/",
+        },
       },
+      pickers = {
+        live_grep = {
+          additional_args = function(opts)
+            return {"--hidden", "--no-ignore-vcs"}
+          end
+        },
+        find_files = {
+          find_command = {"rg", "--files", "--hidden", "--no-ignore-vcs", "--glob", "!.git/*"}
+        }
+      }
     })
   end,
 }
