@@ -1,13 +1,8 @@
 return {
-  "neovim/nvim-lspconfig",
-  dependencies = {
-    "williamboman/mason.nvim"
-  },
+  "williamboman/mason.nvim",
   config = function()
-    -- Setup mason first
+    -- Setup mason for LSP server management
     require("mason").setup()
-
-    local lspconfig = require("lspconfig")
 
     -- Enable hyperlinks in LSP hover and signature help
     vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(
@@ -40,12 +35,29 @@ return {
       vim.keymap.set('n', '<C-k>', vim.lsp.buf.signature_help, opts)
     end
 
-    -- Manually setup each server
-    local servers = { "lua_ls", "pyright", "ts_ls", "rust_analyzer", "bashls" }
-    for _, server in ipairs(servers) do
-      lspconfig[server].setup({
-        capabilities = capabilities,
-        on_attach = on_attach,
+    -- Setup LSP servers manually using vim.lsp.start
+    local servers = {
+      lua_ls = { cmd = { "lua-language-server" } },
+      pyright = { cmd = { "pyright-langserver", "--stdio" } },
+      ts_ls = { cmd = { "typescript-language-server", "--stdio" } },
+      rust_analyzer = { cmd = { "rust-analyzer" } },
+      bashls = { cmd = { "bash-language-server", "start" } }
+    }
+
+    for name, config in pairs(servers) do
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = name == "lua_ls" and "lua" or
+                  name == "pyright" and "python" or
+                  name == "ts_ls" and {"javascript", "typescript"} or
+                  name == "rust_analyzer" and "rust" or
+                  name == "bashls" and {"sh", "bash"} or nil,
+        callback = function()
+          vim.lsp.start(vim.tbl_extend("force", config, {
+            name = name,
+            capabilities = capabilities,
+            on_attach = on_attach,
+          }))
+        end,
       })
     end
   end

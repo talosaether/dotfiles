@@ -7,19 +7,31 @@ return {
     -- "nvim-tree/nvim-web-devicons",
   },
   cmd = "Telescope",
-  keys = {
-    { "<leader>tf", function() require("telescope.builtin").find_files() end, desc = "Find files" },
-    { "<leader>tg", function() require("telescope.builtin").live_grep() end,  desc = "Live grep"  },
-    { "<leader>tb", function() require("telescope.builtin").buffers() end,    desc = "Buffers"    },
-    { "<leader>th", function() require("telescope.builtin").help_tags() end,  desc = "Help"       },
+  keys = function()
+    local safe_telescope = function(builtin_func)
+      return function()
+        if vim.fn.getcmdwintype() ~= "" then
+          vim.notify("Can't open Telescope from command-line window", vim.log.levels.WARN)
+          return
+        end
+        builtin_func()
+      end
+    end
 
-    -- LSP navigation with hyperlinks
-    { "<leader>ld", function() require("telescope.builtin").lsp_definitions() end, desc = "LSP definitions" },
-    { "<leader>li", function() require("telescope.builtin").lsp_implementations() end, desc = "LSP implementations" },
-    { "<leader>lr", function() require("telescope.builtin").lsp_references() end, desc = "LSP references" },
-    { "<leader>ls", function() require("telescope.builtin").lsp_document_symbols() end, desc = "Document symbols" },
-    { "<leader>lw", function() require("telescope.builtin").lsp_workspace_symbols() end, desc = "Workspace symbols" },
-  },
+    return {
+      { "<leader>tf", safe_telescope(function() require("telescope.builtin").find_files() end), desc = "Find files" },
+      { "<leader>tg", safe_telescope(function() require("telescope.builtin").live_grep() end), desc = "Live grep" },
+      { "<leader>tb", safe_telescope(function() require("telescope.builtin").buffers() end), desc = "Buffers" },
+      { "<leader>th", safe_telescope(function() require("telescope.builtin").help_tags() end), desc = "Help" },
+
+      -- LSP navigation with hyperlinks
+      { "<leader>ld", safe_telescope(function() require("telescope.builtin").lsp_definitions() end), desc = "LSP definitions" },
+      { "<leader>li", safe_telescope(function() require("telescope.builtin").lsp_implementations() end), desc = "LSP implementations" },
+      { "<leader>lr", safe_telescope(function() require("telescope.builtin").lsp_references() end), desc = "LSP references" },
+      { "<leader>ls", safe_telescope(function() require("telescope.builtin").lsp_document_symbols() end), desc = "Document symbols" },
+      { "<leader>lw", safe_telescope(function() require("telescope.builtin").lsp_workspace_symbols() end), desc = "Workspace symbols" },
+    }
+  end,
   config = function()
     require("telescope").setup({
       defaults = {
