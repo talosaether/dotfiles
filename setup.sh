@@ -6,6 +6,7 @@ NVIM_INSTALL_METHOD="${NVIM_INSTALL_METHOD:-appimage}"
 TMUX_INSTALL_TPM="${TMUX_INSTALL_TPM:-1}"
 TARGET_USER="${TARGET_USER:-$(whoami)}"
 TARGET_HOME="${TARGET_HOME:-$HOME}"
+REPLACE_CONFIGS="${REPLACE_CONFIGS:-1}"  # Default to replace existing configs
 
 # -------------------------- Logging -----------------------------------------
 log()     { echo "[INFO]  $(date +'%Y-%m-%d %H:%M:%S') $*"; }
@@ -282,20 +283,60 @@ setw -g pane-base-index 1
 
 # Reload config
 bind r source-file ~/.config/tmux/tmux.conf \; display-message "Config reloaded!"
+
+# vim-tmux-navigator integration
+# Smart pane switching with awareness of Vim splits.
+# See: https://github.com/christoomey/vim-tmux-navigator
+is_vim="ps -o state= -o comm= -t '#{pane_tty}' \
+    | grep -iqE '^[^TXZ ]+ +(\\S+\\/)?g?(view|l?n?vim?x?|fzf)(diff)?$'"
+bind-key -n 'C-h' if-shell "$is_vim" 'send-keys C-h'  'select-pane -L'
+bind-key -n 'C-j' if-shell "$is_vim" 'send-keys C-j'  'select-pane -D'
+bind-key -n 'C-k' if-shell "$is_vim" 'send-keys C-k'  'select-pane -U'
+bind-key -n 'C-l' if-shell "$is_vim" 'send-keys C-l'  'select-pane -R'
+
+tmux_version='$(tmux -V | sed -En "s/^tmux ([0-9]+(.[0-9]+)?).*/\1/p")'
+if-shell -b '[ "$(echo "$tmux_version < 3.0" | bc)" = 1 ]' \
+    "bind-key -n 'C-\\' if-shell \"$is_vim\" 'send-keys C-\\'  'select-pane -l'"
+if-shell -b '[ "$(echo "$tmux_version >= 3.0" | bc)" = 1 ]' \
+    "bind-key -n 'C-\\' if-shell \"$is_vim\" 'send-keys C-\\\\'  'select-pane -l'"
+
+bind-key -T copy-mode-vi 'C-h' select-pane -L
+bind-key -T copy-mode-vi 'C-j' select-pane -D
+bind-key -T copy-mode-vi 'C-k' select-pane -U
+bind-key -T copy-mode-vi 'C-l' select-pane -R
+bind-key -T copy-mode-vi 'C-\' select-pane -l
 TMUX
   success "Minimal TMUX configuration installed"
 }
 
 backup_existing_config() {
   local config_path="$1"
-  local backup_dir="$HOME/.config/dotfiles-backup-$(date +%Y%m%d-%H%M%S)"
+  local backup_dir="$TARGET_HOME/.config/dotfiles-backup-$(date +%Y%m%d-%H%M%S)"
 
   if [ -e "$config_path" ]; then
     log "Backing up existing config: $config_path"
     mkdir -p "$backup_dir"
-    mv "$config_path" "$backup_dir/"
+    cp -r "$config_path" "$backup_dir/"
     success "Backed up to: $backup_dir"
   fi
+}
+
+force_remove_config() {
+  local config_path="$1"
+  local config_name="$2"
+
+  if [ -e "$config_path" ]; then
+    if [ "$REPLACE_CONFIGS" -eq 1 ]; then
+      log "Removing existing $config_name configuration for replacement: $config_path"
+      rm -rf "$config_path"
+      success "Existing $config_name configuration removed"
+    else
+      warn "Existing $config_name configuration found: $config_path"
+      warn "Use REPLACE_CONFIGS=1 or --replace flag to force replacement"
+      return 1
+    fi
+  fi
+  return 0
 }
 
 detect_packages() {
@@ -317,31 +358,39 @@ install_package() {
   local package="$1"
   log "Installing $package configuration..."
 
-  # Remove existing symlinks first to avoid conflicts
-  stow --target="$HOME" --delete "$package" 2>/dev/null || true
+  # Remove existing stow symlinks first to avoid conflicts
+  stow --target="$TARGET_HOME" --delete "$package" 2>/dev/null || true
 
-  # Check for conflicts and remove/backup if necessary
+  # Handle configuration replacement based on package type
   if [ "$package" = "nvim" ]; then
-    if [ -e "$HOME/.config/nvim" ] && [ ! -L "$HOME/.config/nvim" ]; then
-      backup_existing_config "$HOME/.config/nvim"
-    elif [ -L "$HOME/.config/nvim" ]; then
-      rm -f "$HOME/.config/nvim"
+    # Backup existing nvim config if it exists and not a symlink
+    if [ -e "$TARGET_HOME/.config/nvim" ] && [ ! -L "$TARGET_HOME/.config/nvim" ]; then
+      if [ "$REPLACE_CONFIGS" -eq 1 ]; then
+        backup_existing_config "$TARGET_HOME/.config/nvim"
+      fi
     fi
+    # Remove any existing nvim config (files or symlinks)
+    force_remove_config "$TARGET_HOME/.config/nvim" "nvim" || return 1
+
   elif [ "$package" = "tmux" ]; then
-    if [ -e "$HOME/.config/tmux" ] && [ ! -L "$HOME/.config/tmux" ]; then
-      backup_existing_config "$HOME/.config/tmux"
-    elif [ -L "$HOME/.config/tmux" ]; then
-      rm -f "$HOME/.config/tmux"
+    # Backup existing tmux config if it exists and not a symlink
+    if [ -e "$TARGET_HOME/.config/tmux" ] && [ ! -L "$TARGET_HOME/.config/tmux" ]; then
+      if [ "$REPLACE_CONFIGS" -eq 1 ]; then
+        backup_existing_config "$TARGET_HOME/.config/tmux"
+      fi
     fi
-    if [ -e "$HOME/.tmux.conf" ] && [ ! -L "$HOME/.tmux.conf" ]; then
-      backup_existing_config "$HOME/.tmux.conf"
-    elif [ -L "$HOME/.tmux.conf" ]; then
-      rm -f "$HOME/.tmux.conf"
+    if [ -e "$TARGET_HOME/.tmux.conf" ] && [ ! -L "$TARGET_HOME/.tmux.conf" ]; then
+      if [ "$REPLACE_CONFIGS" -eq 1 ]; then
+        backup_existing_config "$TARGET_HOME/.tmux.conf"
+      fi
     fi
+    # Remove any existing tmux configs (files or symlinks)
+    force_remove_config "$TARGET_HOME/.config/tmux" "tmux" || return 1
+    force_remove_config "$TARGET_HOME/.tmux.conf" "tmux legacy" || return 1
   fi
 
   # Use stow to create symlinks, forcing replacement
-  if stow --target="$HOME" --verbose --restow "$package"; then
+  if stow --target="$TARGET_HOME" --verbose --restow "$package"; then
     success "Successfully installed $package"
   else
     error "Failed to install $package"
@@ -430,8 +479,8 @@ update_repository() {
 }
 
 create_tmux_symlink() {
-  local tmux_config="$HOME/.config/tmux/tmux.conf"
-  local tmux_legacy="$HOME/.tmux.conf"
+  local tmux_config="$TARGET_HOME/.config/tmux/tmux.conf"
+  local tmux_legacy="$TARGET_HOME/.tmux.conf"
 
   if [ -f "$tmux_config" ]; then
     log "Creating symlink: ~/.tmux.conf -> ~/.config/tmux/tmux.conf"
@@ -484,8 +533,66 @@ check_and_install_tools() {
   esac
 }
 
+show_help() {
+  cat << 'EOF'
+Usage: ./setup.sh [OPTIONS]
+
+Options:
+  --replace        Force replacement of existing configurations (default)
+  --no-replace     Preserve existing configurations and fail if conflicts exist
+  --help, -h       Show this help message
+
+Environment Variables:
+  REPLACE_CONFIGS     Set to 1 to replace configs, 0 to preserve (default: 1)
+  NVIM_VERSION        Neovim version to install (default: 0.10.0)
+  NVIM_INSTALL_METHOD Installation method: appimage (default: appimage)
+  TMUX_INSTALL_TPM    Install TMUX Plugin Manager: 1 or 0 (default: 1)
+  TARGET_USER         Target user for installation (default: current user)
+  TARGET_HOME         Target home directory (default: $HOME)
+
+Examples:
+  ./setup.sh                    # Default: replace existing configs
+  ./setup.sh --replace          # Explicitly force replacement
+  ./setup.sh --no-replace       # Preserve existing configs
+  REPLACE_CONFIGS=0 ./setup.sh  # Same as --no-replace
+
+EOF
+}
+
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --replace)
+        REPLACE_CONFIGS=1
+        shift
+        ;;
+      --no-replace)
+        REPLACE_CONFIGS=0
+        shift
+        ;;
+      --help|-h)
+        show_help
+        exit 0
+        ;;
+      *)
+        error "Unknown option: $1"
+        show_help
+        exit 1
+        ;;
+    esac
+  done
+}
+
 main() {
+  parse_args "$@"
+
   log "Setting up dotfiles..."
+  if [ "$REPLACE_CONFIGS" -eq 1 ]; then
+    log "Configuration replacement: ENABLED (existing configs will be backed up and replaced)"
+  else
+    log "Configuration replacement: DISABLED (existing configs will be preserved)"
+  fi
+
   update_repository
   check_dependencies
   check_and_install_tools
