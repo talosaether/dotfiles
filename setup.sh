@@ -148,20 +148,9 @@ run_as() {
 
 check_dependencies() {
   if ! command -v stow >/dev/null 2>&1; then
-    error "GNU Stow is required but not installed"
+    warn "GNU Stow is required but not installed"
     os="$(detect_os)"
-    case "$os" in
-      ubuntu)
-        log "Install with: sudo apt install stow"
-        ;;
-      freebsd)
-        log "Install with: sudo pkg install stow"
-        ;;
-      *)
-        log "Please install GNU Stow manually"
-        ;;
-    esac
-    exit 1
+    install_stow "$os" || exit 1
   fi
   success "GNU Stow found"
 }
