@@ -520,6 +520,24 @@ check_and_install_tools() {
       install_tmux
       ;;
   esac
+
+  # Check ripgrep (required by tools like Telescope live_grep)
+  if command -v rg >/dev/null 2>&1; then
+    success "ripgrep found ($(rg --version | head -n1))"
+  else
+    log "ripgrep not found, installing..."
+    os="$(detect_os)"
+    case "$os" in
+      ubuntu)
+        apt_install ripgrep
+        ;;
+      freebsd)
+        sudo pkg install -y ripgrep
+        ;;
+      *) warn "Unsupported OS for auto-install; please install 'ripgrep' manually." ;;
+    esac
+  fi
+
 }
 
 show_help() {
