@@ -12,6 +12,8 @@ return {
         local path = vim.api.nvim_buf_get_name(0)
         if path == "" then
           vim.notify("No file on disk for this buffer.", vim.log.levels.WARN)
+          vim.cmd("NvimTreeOpen")
+          vim.cmd("NvimTreeFocus")
           return
         end
         -- Try the API; if it's not ready for any reason, fall back to commands.
