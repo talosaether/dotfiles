@@ -35,7 +35,25 @@ return {
   config = function()
     require("telescope").setup({
       defaults = {
-        mappings = {
+        -- This filters filenames in many pickers, but NOT the search operation itself.
+        file_ignore_patterns = { "node_modules", "dist", "coverage", "build", "%.min%.js" },
+        -- This controls what ripgrep actually searches.
+        vimgrep_arguments = {
+          "rg",
+          "--color=never",
+          "--no-heading",
+          "--with-filename",
+          "--line-number",
+          "--column",
+          "--smart-case",
+          "--hidden",              -- still see hidden files if not ignored
+          "-g", "!node_modules/**",
+          "-g", "!dist/**",
+          "-g", "!coverage/**",
+          "-g", "!build/**",
+          "-g", "!.git/**",
+        },
+       mappings = {
           i = {
             ["<C-u>"] = false,
             ["<C-d>"] = false,
