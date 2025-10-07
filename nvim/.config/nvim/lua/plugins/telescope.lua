@@ -52,6 +52,8 @@ return {
           "-g", "!coverage/**",
           "-g", "!build/**",
           "-g", "!.git/**",
+          "-g", "!venv/**",
+          "-g", "!.venv/**",
         },
        mappings = {
           i = {
