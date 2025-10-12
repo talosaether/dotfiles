@@ -25,6 +25,7 @@ detect_os() {
       elif command -v pkg >/dev/null 2>&1; then echo "freebsd"
       else echo "linux"; fi
       ;;
+    Darwin*)  echo "macos" ;;
     FreeBSD*) echo "freebsd" ;;
     *)        echo "unknown" ;;
   esac
@@ -61,6 +62,21 @@ curl_retry() {
 run_as() {
   if [ "$(whoami)" = "$TARGET_USER" ]; then sh -c "$*"
   else sudo -u "$TARGET_USER" sh -c "$*"; fi
+}
+
+safe_chown() {
+  path="$1"
+  user="${2:-$TARGET_USER}"
+
+  # Get the user's primary group (macOS uses 'staff', Linux typically uses username)
+  if [ "$(whoami)" = "$user" ]; then
+    group="$(id -gn)"
+  else
+    group="$(id -gn "$user" 2>/dev/null || echo "$user")"
+  fi
+
+  # Try with sudo first, then without (macOS often doesn't need sudo for own files)
+  sudo chown -R "$user:$group" "$path" 2>/dev/null || chown -R "$user:$group" "$path" 2>/dev/null || true
 }
 
 backup_existing_config() {
@@ -118,7 +134,43 @@ force_remove_path() {
 }
 
 # -------------------------- Dev Tools ---------------------------------------
-apt_install() { pkg="$1"; log "Installing $pkg via apt..."; sudo apt update && sudo apt install -y "$pkg"; }
+# Package manager wrappers - unified interface across OS types
+apt_install() {
+  pkg="$1"; log "Installing $pkg via apt...";
+  sudo apt update && sudo apt install -y "$pkg"
+}
+
+brew_install() {
+  pkg="$1"; log "Installing $pkg via Homebrew..."
+
+  # Ensure Homebrew is installed first
+  if ! command -v brew >/dev/null 2>&1; then
+    log "Homebrew not found, installing..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # Add Homebrew to PATH for this session (location varies by architecture)
+    if [ -x "/opt/homebrew/bin/brew" ]; then
+      eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x "/usr/local/bin/brew" ]; then
+      eval "$(/usr/local/bin/brew shellenv)"
+    fi
+  fi
+
+  brew install "$pkg"
+}
+
+pkg_install() {
+  pkg="$1"; os="$2"
+
+  # ===== FORK: OS-specific package installation =====
+  case "$os" in
+    ubuntu)  apt_install "$pkg" ;;
+    macos)   brew_install "$pkg" ;;
+    freebsd) log "Installing $pkg via pkg..."; sudo pkg install -y "$pkg" ;;
+    *)       error "Unsupported OS: $os"; return 1 ;;
+  esac
+  # ===== END FORK =====
+}
 
 install_neovim() {
   log "Installing Neovim v${NVIM_VERSION} via ${NVIM_INSTALL_METHOD}..."
@@ -129,11 +181,19 @@ install_neovim() {
     warn "Different Neovim detected: $(nvim --version | head -n1)"
   fi
 
+  os="$(detect_os)"
+
+  # ===== FORK: macOS doesn't support AppImage =====
+  if [ "${NVIM_INSTALL_METHOD}" = "appimage" ] && [ "$os" = "macos" ]; then
+    warn "AppImage not supported on macOS; falling back to Homebrew"
+    NVIM_INSTALL_METHOD="package"
+  fi
+  # ===== END FORK =====
+
   if [ "${NVIM_INSTALL_METHOD}" = "appimage" ]; then
     if [ "$(uname -m)" != "x86_64" ]; then
       error "AppImage method needs x86_64; falling back to package manager"
-      os="$(detect_os)"
-      [ "$os" = "ubuntu" ] && apt_install neovim || sudo pkg install -y neovim
+      pkg_install neovim "$os"
     else
       curl_retry -o /tmp/nvim.appimage \
         "https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim.appimage"
@@ -144,7 +204,7 @@ install_neovim() {
       rm -f /tmp/nvim.appimage
     fi
   else
-    os="$(detect_os)"
+    # ===== FORK: OS-specific package installation =====
     if [ "$os" = "ubuntu" ]; then
       apt_install neovim
       inst_ver="$(nvim --version | head -n1 | sed 's/.*v//')"
@@ -153,11 +213,11 @@ install_neovim() {
         sudo add-apt-repository ppa:neovim-ppa/unstable -y
         sudo apt update && sudo apt install -y neovim
       fi
-    elif [ "$os" = "freebsd" ]; then
-      sudo pkg install -y neovim
     else
-      error "Unsupported OS for package install"
+      # macOS and FreeBSD use unified installer
+      pkg_install neovim "$os"
     fi
+    # ===== END FORK =====
   fi
 
   if nvim --version | head -n1 | grep -q "NVIM v${NVIM_VERSION}"; then
@@ -167,7 +227,7 @@ install_neovim() {
   fi
 
   install -d -m 700 "$TARGET_HOME/.config"
-  sudo chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config"
+  safe_chown "$TARGET_HOME/.config"
   log "Installing minimal Neovim config (safe fallback)"
   run_as "mkdir -p ~/.config/nvim"
   run_as "cat > ~/.config/nvim/init.lua" <<'NVIM'
@@ -185,13 +245,12 @@ install_tmux() {
   log "Ensuring tmux present + TPM (optional)"
   if ! command -v tmux >/dev/null 2>&1; then
     os="$(detect_os)"
-    if [ "$os" = "ubuntu" ]; then apt_install tmux
-    elif [ "$os" = "freebsd" ]; then sudo pkg install -y tmux
-    else error "Unsupported OS for tmux install"; fi
+    # Unified installation across all OS types
+    pkg_install tmux "$os"
   fi
 
   install -d -m 700 "$TARGET_HOME/.config"
-  sudo chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config"
+  safe_chown "$TARGET_HOME/.config"
 
   log "Installing minimal tmux config (safe fallback)"
   run_as "mkdir -p ~/.config/tmux"
@@ -250,19 +309,15 @@ install_package() {
 
   # 1) If package contains a .config root, mirror it directly into ~/.config
   if [ -d "$package/.config" ]; then
-    if command -v find >/dev/null 2>&1; then
-      subs=$(find "$package/.config" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null || true)
-      [ -z "$subs" ] && subs=$(cd "$package/.config" && ls -1d */ 2>/dev/null | sed 's:/$::')
-    else
-      subs=$(cd "$package/.config" && ls -1d */ 2>/dev/null | sed 's:/$::')
-    fi
+    # Use ls instead of find -printf (not supported on macOS)
+    subs=$(cd "$package/.config" && ls -1d */ 2>/dev/null | sed 's:/$::' || true)
     for sub in $subs; do
       target="$TARGET_HOME/.config/$sub"
       force_remove_path "$target" || true
     done
     ensure_dir "$TARGET_HOME/.config"
     copy_tree "$package/.config" "$TARGET_HOME/.config"
-    chown -R "$TARGET_USER":"$TARGET_USER" "$TARGET_HOME/.config" 2>/dev/null || true
+    safe_chown "$TARGET_HOME/.config"
     success "Installed $package into ~/.config"
     return 0
   fi
@@ -276,7 +331,7 @@ install_package() {
         force_remove_path "$dest" || true
         ensure_dir "$dest"
         copy_tree "$package" "$dest"
-        chown -R "$TARGET_USER":"$TARGET_USER" "$dest" 2>/dev/null || true
+        safe_chown "$dest"
         success "Installed $package into ~/.config/nvim"
         return 0
       fi
@@ -286,7 +341,7 @@ install_package() {
         force_remove_path "$dest" || true
         ensure_dir "$dest"
         copy_tree "$package/nvim" "$dest"
-        chown -R "$TARGET_USER":"$TARGET_USER" "$dest" 2>/dev/null || true
+        safe_chown "$dest"
         success "Installed $package/nvim into ~/.config/nvim"
         return 0
       fi
@@ -297,7 +352,7 @@ install_package() {
         force_remove_path "$dest" || true
         ensure_dir "$dest"
         cp -f "$package/tmux.conf" "$dest/tmux.conf"
-        chown -R "$TARGET_USER":"$TARGET_USER" "$dest" 2>/dev/null || true
+        safe_chown "$dest"
         success "Installed tmux.conf into ~/.config/tmux"
         return 0
       fi
@@ -319,7 +374,7 @@ install_package() {
   fi
 
   copy_tree "$package" "$TARGET_HOME"
-  chown -R "$TARGET_USER":"$TARGET_USER" "$TARGET_HOME" 2>/dev/null || true
+  safe_chown "$TARGET_HOME"
   success "Installed $package into ~/"
 }
 
@@ -375,11 +430,8 @@ check_and_install_tools() {
   else
     log "ripgrep not found; installing..."
     os="$(detect_os)"
-    case "$os" in
-      ubuntu) apt_install ripgrep ;;
-      freebsd) sudo pkg install -y ripgrep ;;
-      *) warn "Unsupported OS for auto-install of ripgrep; install manually." ;;
-    esac
+    # Unified installation across all OS types
+    pkg_install ripgrep "$os" || warn "Failed to install ripgrep; install manually if needed."
   fi
 }
 
