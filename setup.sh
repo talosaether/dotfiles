@@ -241,6 +241,113 @@ NVIM
   success "Minimal Neovim configuration installed"
 }
 
+install_nerd_fonts() {
+  log "Installing Nerd Fonts for nvim-web-devicons..."
+  os="$(detect_os)"
+
+  # ===== FORK: OS-specific font installation =====
+  case "$os" in
+    ubuntu)
+      log "Installing fonts-firacode on Ubuntu..."
+      apt_install fonts-firacode
+      # Also install a Nerd Font variant
+      if [ ! -d "$TARGET_HOME/.local/share/fonts/NerdFonts" ]; then
+        run_as "mkdir -p ~/.local/share/fonts/NerdFonts"
+        log "Downloading FiraCode Nerd Font..."
+        curl_retry -Lo /tmp/FiraCode.zip https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/FiraCode.zip
+        run_as "unzip -q -o /tmp/FiraCode.zip -d ~/.local/share/fonts/NerdFonts/"
+        rm -f /tmp/FiraCode.zip
+        run_as "fc-cache -fv" >/dev/null 2>&1 || true
+        success "FiraCode Nerd Font installed"
+      else
+        warn "Nerd Fonts already installed; skipping"
+      fi
+      ;;
+
+    macos)
+      log "Installing font via Homebrew cask..."
+      if ! brew list --cask font-fira-code-nerd-font >/dev/null 2>&1; then
+        brew install --cask font-fira-code-nerd-font
+        success "FiraCode Nerd Font installed"
+      else
+        warn "FiraCode Nerd Font already installed; skipping"
+      fi
+      ;;
+
+    freebsd)
+      log "Installing fonts on FreeBSD..."
+      sudo pkg install -y firacode
+      if [ ! -d "$TARGET_HOME/.local/share/fonts/NerdFonts" ]; then
+        run_as "mkdir -p ~/.local/share/fonts/NerdFonts"
+        log "Downloading FiraCode Nerd Font..."
+        curl_retry -Lo /tmp/FiraCode.zip https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/FiraCode.zip
+        run_as "unzip -q -o /tmp/FiraCode.zip -d ~/.local/share/fonts/NerdFonts/"
+        rm -f /tmp/FiraCode.zip
+        run_as "fc-cache -fv" >/dev/null 2>&1 || true
+        success "FiraCode Nerd Font installed"
+      else
+        warn "Nerd Fonts already installed; skipping"
+      fi
+      ;;
+
+    *)
+      warn "Unsupported OS for font installation; install Nerd Fonts manually"
+      return 1
+      ;;
+  esac
+  # ===== END FORK =====
+}
+
+install_git() {
+  log "Ensuring git is installed..."
+  if command -v git >/dev/null 2>&1; then
+    success "git already installed ($(git --version))"
+    return 0
+  fi
+
+  os="$(detect_os)"
+  pkg_install git "$os"
+  success "git installed"
+}
+
+install_build_tools() {
+  log "Installing build tools..."
+  os="$(detect_os)"
+
+  # ===== FORK: OS-specific build tools =====
+  case "$os" in
+    ubuntu)
+      log "Installing build-essential on Ubuntu..."
+      apt_install build-essential
+      ;;
+
+    macos)
+      log "Checking Xcode Command Line Tools..."
+      if ! xcode-select -p >/dev/null 2>&1; then
+        log "Installing Xcode Command Line Tools..."
+        xcode-select --install
+        warn "Please complete the Xcode Command Line Tools installation and re-run this script"
+        return 1
+      else
+        success "Xcode Command Line Tools already installed"
+      fi
+      ;;
+
+    freebsd)
+      log "Installing build tools on FreeBSD..."
+      sudo pkg install -y gmake gcc
+      ;;
+
+    *)
+      warn "Unsupported OS for build tools installation"
+      return 1
+      ;;
+  esac
+  # ===== END FORK =====
+
+  success "Build tools installed"
+}
+
 install_tmux() {
   log "Ensuring tmux present + TPM (optional)"
   if ! command -v tmux >/dev/null 2>&1; then
@@ -410,6 +517,63 @@ setup_dotfiles() {
 check_and_install_tools() {
   log "Checking dev tools..."
 
+  # Git (required for plugin managers and TPM)
+  if command -v git >/dev/null 2>&1; then
+    success "git OK ($(git --version))"
+  else
+    log "git not found; installing..."
+    install_git
+  fi
+
+  # Build tools (required for some Neovim plugins)
+  os="$(detect_os)"
+  case "$os" in
+    ubuntu)
+      if dpkg -l | grep -q build-essential; then
+        success "Build tools OK"
+      else
+        log "Build tools not found; installing..."
+        install_build_tools
+      fi
+      ;;
+    macos)
+      if xcode-select -p >/dev/null 2>&1; then
+        success "Xcode Command Line Tools OK"
+      else
+        log "Xcode Command Line Tools not found; installing..."
+        install_build_tools
+      fi
+      ;;
+    freebsd)
+      if command -v gmake >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1; then
+        success "Build tools OK"
+      else
+        log "Build tools not found; installing..."
+        install_build_tools
+      fi
+      ;;
+  esac
+
+  # Nerd Fonts (required for nvim-web-devicons)
+  case "$os" in
+    ubuntu|freebsd)
+      if [ -d "$TARGET_HOME/.local/share/fonts/NerdFonts" ] || fc-list | grep -qi "nerd"; then
+        success "Nerd Fonts installed"
+      else
+        log "Nerd Fonts not found; installing..."
+        install_nerd_fonts
+      fi
+      ;;
+    macos)
+      if brew list --cask font-fira-code-nerd-font >/dev/null 2>&1; then
+        success "Nerd Fonts installed"
+      else
+        log "Nerd Fonts not found; installing..."
+        install_nerd_fonts
+      fi
+      ;;
+  esac
+
   # Neovim
   case $(check_app_version nvim "$NVIM_VERSION" "nvim --version | head -n1 | sed 's/.*v//'"; echo $?) in
     0) success "Neovim OK ($(nvim --version | head -n1))" ;;
@@ -429,7 +593,6 @@ check_and_install_tools() {
     success "ripgrep present ($(rg --version | head -n1))"
   else
     log "ripgrep not found; installing..."
-    os="$(detect_os)"
     # Unified installation across all OS types
     pkg_install ripgrep "$os" || warn "Failed to install ripgrep; install manually if needed."
   fi
