@@ -640,6 +640,9 @@ main() {
     log "Replacement: DISABLED (conflicts preserved)"
   fi
 
+  # Ensure ~/.config exists early
+  ensure_dir "$TARGET_HOME/.config"
+
   # Optional: update repo if inside a git work tree
   if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     log "Updating repository..."
