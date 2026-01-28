@@ -14,18 +14,14 @@ return {
   {
     "folke/trouble.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },
-    opts = {
-      -- Enable hyperlinks in diagnostics and references
-      auto_open = false,
-      auto_close = true,
-      use_diagnostic_signs = true,
-    },
+    opts = {},
+    cmd = "Trouble",
     keys = {
-      { "<leader>tt", "<cmd>TroubleToggle<cr>", desc = "Toggle Trouble" },
-      { "<leader>td", "<cmd>TroubleToggle document_diagnostics<cr>", desc = "Document Diagnostics" },
-      { "<leader>tq", "<cmd>TroubleToggle quickfix<cr>", desc = "Quickfix List" },
-      { "<leader>tl", "<cmd>TroubleToggle loclist<cr>", desc = "Location List" },
-      { "gR", "<cmd>TroubleToggle lsp_references<cr>", desc = "LSP References" },
+      { "<leader>tt", "<cmd>Trouble diagnostics toggle<cr>", desc = "Diagnostics (Trouble)" },
+      { "<leader>td", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", desc = "Buffer Diagnostics" },
+      { "<leader>tq", "<cmd>Trouble quickfix toggle<cr>", desc = "Quickfix List" },
+      { "<leader>tl", "<cmd>Trouble loclist toggle<cr>", desc = "Location List" },
+      { "gR", "<cmd>Trouble lsp_references toggle<cr>", desc = "LSP References" },
     },
   }
 }

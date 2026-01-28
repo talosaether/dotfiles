@@ -37,5 +37,5 @@ vim.keymap.set("v", ">", ">gv", {  desc = "Indent right and reselect" })
 vim.keymap.set("n", "J", "mzJ`z", {  desc = "Join lines and keep cursor position" })
 
 -- Quick config editing
-vim.keymap.set("n", "<leader>rc", "<Cmd>e ~/.config/nvim/irit.lua<CR>", {  desc = "Edit config" })
+vim.keymap.set("n", "<leader>rc", "<Cmd>e ~/.config/nvim/init.lua<CR>", { desc = "Edit config" })
 
