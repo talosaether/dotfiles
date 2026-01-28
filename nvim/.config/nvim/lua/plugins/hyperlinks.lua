@@ -21,7 +21,7 @@ return {
       { "<leader>td", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", desc = "Buffer Diagnostics" },
       { "<leader>tq", "<cmd>Trouble quickfix toggle<cr>", desc = "Quickfix List" },
       { "<leader>tl", "<cmd>Trouble loclist toggle<cr>", desc = "Location List" },
-      { "gR", "<cmd>Trouble lsp_references toggle<cr>", desc = "LSP References" },
+      { "gR", "<cmd>Trouble lsp_references focus=true<cr>", desc = "LSP References" },
     },
   }
 }
