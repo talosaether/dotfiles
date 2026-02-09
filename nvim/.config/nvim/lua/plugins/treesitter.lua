@@ -4,8 +4,8 @@ return {
   event = { "BufReadPost", "BufNewFile" },
   lazy = false,
   config = function()
-    require("nvim-treesitter.configs").setup({
-      -- language parser that MUST be installed
+    ---@diagnostic disable-next-line: missing-fields
+    require("nvim-treesitter").setup({
       ensure_installed = {
         "lua",
         "python",
@@ -25,22 +25,21 @@ return {
         "vue",
         "svelte",
       },
-      auto_install = true, -- auto-install any other parsers
+      auto_install = true,
       sync_install = false,
-      highlight = {
-        enable = true,
-        additional_vim_regex_highlighting = false,
-      },
-      indent = { enable = true },
-      incremental_selection = {
-        enable = true,
-        keymaps = {
-          init_selection = "<CR>",
-          node_incremental = "<CR>",
-          scope_incremental = "<TAB>",
-          node_decremental = "<S-TAB>",
-        },
-      },
     })
+    -- Incremental selection keymaps
+    vim.keymap.set("n", "<CR>", function()
+      require("nvim-treesitter.incremental_selection").init_selection()
+    end, { desc = "Init treesitter selection" })
+    vim.keymap.set("v", "<CR>", function()
+      require("nvim-treesitter.incremental_selection").node_incremental()
+    end, { desc = "Increment treesitter selection" })
+    vim.keymap.set("v", "<TAB>", function()
+      require("nvim-treesitter.incremental_selection").scope_incremental()
+    end, { desc = "Increment treesitter scope" })
+    vim.keymap.set("v", "<S-TAB>", function()
+      require("nvim-treesitter.incremental_selection").node_decremental()
+    end, { desc = "Decrement treesitter selection" })
   end,
 }

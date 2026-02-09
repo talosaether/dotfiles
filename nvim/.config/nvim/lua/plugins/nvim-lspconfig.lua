@@ -17,6 +17,9 @@ return {
           "ts_ls",
           "rust_analyzer",
           "bashls",
+          "gopls",
+          "dockerls",
+          "docker_compose_language_service",
         },
         automatic_installation = true,
       })
@@ -123,8 +126,28 @@ return {
         capabilities = capabilities,
       })
 
+      vim.lsp.config("gopls", {
+        capabilities = capabilities,
+        settings = {
+          gopls = {
+            analyses = {
+              unusedparams = true,
+            },
+            staticcheck = true,
+          },
+        },
+      })
+
+      vim.lsp.config("dockerls", {
+        capabilities = capabilities,
+      })
+
+      vim.lsp.config("docker_compose_language_service", {
+        capabilities = capabilities,
+      })
+
       -- Enable all configured servers
-      vim.lsp.enable({ "lua_ls", "pyright", "ts_ls", "rust_analyzer", "bashls" })
+      vim.lsp.enable({ "lua_ls", "pyright", "ts_ls", "rust_analyzer", "bashls", "gopls", "dockerls", "docker_compose_language_service" })
     end,
   },
 }
