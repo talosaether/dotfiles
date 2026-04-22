@@ -328,6 +328,24 @@ install_go() {
   success "go installed"
 }
 
+install_tree_sitter_cli() {
+  # tree-sitter CLI is required by nvim-treesitter's main branch to compile parsers.
+  log "Ensuring tree-sitter CLI is installed..."
+  if command -v tree-sitter >/dev/null 2>&1; then
+    success "tree-sitter already installed ($(tree-sitter --version 2>&1 | head -n1))"
+    return 0
+  fi
+
+  os="$(detect_os)"
+  case "$os" in
+    ubuntu)  apt_install tree-sitter-cli ;;
+    macos)   brew_install tree-sitter ;;
+    freebsd) log "Installing tree-sitter via pkg..."; sudo pkg install -y tree-sitter ;;
+    *)       warn "Unsupported OS for tree-sitter install; nvim-treesitter parser builds will fail until you install it manually"; return 1 ;;
+  esac
+  success "tree-sitter installed"
+}
+
 install_build_tools() {
   log "Installing build tools..."
   os="$(detect_os)"
@@ -549,6 +567,14 @@ check_and_install_tools() {
   else
     log "go not found; installing..."
     install_go || true
+  fi
+
+  # tree-sitter CLI (required by nvim-treesitter main branch to compile parsers)
+  if command -v tree-sitter >/dev/null 2>&1; then
+    success "tree-sitter OK ($(tree-sitter --version 2>&1 | head -n1))"
+  else
+    log "tree-sitter not found; installing..."
+    install_tree_sitter_cli || true
   fi
 
   # Build tools (required for some Neovim plugins)
