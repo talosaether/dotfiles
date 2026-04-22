@@ -4,7 +4,7 @@
 set -e
 
 # -------------------------- Configuration -----------------------------------
-NVIM_VERSION="${NVIM_VERSION:-0.10.0}"
+NVIM_VERSION="${NVIM_VERSION:-0.11.0}"
 NVIM_INSTALL_METHOD="${NVIM_INSTALL_METHOD:-appimage}"   # appimage | package
 TMUX_INSTALL_TPM="${TMUX_INSTALL_TPM:-1}"
 TARGET_USER="${TARGET_USER:-$(whoami)}"
@@ -310,6 +310,24 @@ install_git() {
   success "git installed"
 }
 
+install_go() {
+  # Go is needed so mason can build gopls (`go install`).
+  log "Ensuring Go toolchain is installed..."
+  if command -v go >/dev/null 2>&1; then
+    success "go already installed ($(go version))"
+    return 0
+  fi
+
+  os="$(detect_os)"
+  case "$os" in
+    ubuntu)  apt_install golang-go ;;
+    macos)   brew_install go ;;
+    freebsd) log "Installing go via pkg..."; sudo pkg install -y go ;;
+    *)       warn "Unsupported OS for Go install; mason gopls will fail until you install Go manually"; return 1 ;;
+  esac
+  success "go installed"
+}
+
 install_build_tools() {
   log "Installing build tools..."
   os="$(detect_os)"
@@ -523,6 +541,14 @@ check_and_install_tools() {
   else
     log "git not found; installing..."
     install_git
+  fi
+
+  # Go (required for mason to build gopls)
+  if command -v go >/dev/null 2>&1; then
+    success "go OK ($(go version))"
+  else
+    log "go not found; installing..."
+    install_go || true
   fi
 
   # Build tools (required for some Neovim plugins)
