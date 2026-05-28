@@ -1,6 +1,9 @@
 return {
   "nvim-telescope/telescope.nvim",
-  branch = "0.1.x",
+  -- Telescope's 0.1.x branch still calls removed nvim-treesitter APIs
+  -- such as require("nvim-treesitter.parsers").ft_to_lang().  Use the
+  -- active branch for compatibility with nvim-treesitter's main branch.
+  branch = "master",
   dependencies = {
     "nvim-lua/plenary.nvim",
     -- pretty icons (optional):
