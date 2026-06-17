@@ -143,7 +143,7 @@ test_detect_os() {
     os_result=$(detect_os)
 
     assert_true "[ -n '$os_result' ]" "detect_os: returns non-empty result"
-    assert_true "[ '$os_result' = 'ubuntu' ] || [ '$os_result' = 'freebsd' ] || [ '$os_result' = 'linux' ] || [ '$os_result' = 'unknown' ]" "detect_os: returns valid OS type"
+    assert_true "[ '$os_result' = 'ubuntu' ] || [ '$os_result' = 'fedora' ] || [ '$os_result' = 'freebsd' ] || [ '$os_result' = 'linux' ] || [ '$os_result' = 'unknown' ]" "detect_os: returns valid OS type"
 }
 
 # Test utility functions exist
