@@ -702,7 +702,7 @@ Options:
 
 Environment:
   REPLACE_CONFIGS     1 overwrite (default), 0 preserve
-  NVIM_VERSION        default: 0.10.0
+  NVIM_VERSION        default: 0.11.0
   NVIM_INSTALL_METHOD appimage (default) | package
   TMUX_INSTALL_TPM    1 install (default), 0 skip
   TARGET_USER         default: current user

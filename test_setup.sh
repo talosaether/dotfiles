@@ -171,7 +171,7 @@ test_environment_variables() {
     assert_true "[ -n '$TARGET_HOME' ]" "TARGET_HOME is set"
 
     # Test default values
-    assert_equals "0.10.0" "$NVIM_VERSION" "NVIM_VERSION default value"
+    assert_equals "0.11.0" "$NVIM_VERSION" "NVIM_VERSION default value"
     assert_equals "appimage" "$NVIM_INSTALL_METHOD" "NVIM_INSTALL_METHOD default value"
     assert_equals "1" "$TMUX_INSTALL_TPM" "TMUX_INSTALL_TPM default value"
 }
