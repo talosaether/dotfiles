@@ -25,6 +25,16 @@ apt_install() {
     return 0
 }
 
+dnf_install() {
+    echo "[MOCK] dnf_install called for package: $1"
+    return 0
+}
+
+brew_install() {
+    echo "[MOCK] brew_install called for package: $1"
+    return 0
+}
+
 curl_retry() {
     echo "[MOCK] curl_retry called with args: $*"
     return 0
@@ -162,7 +172,37 @@ test_utility_functions_exist() {
     assert_true "command -v run_as >/dev/null" "run_as function exists"
     assert_true "command -v install_neovim >/dev/null" "install_neovim function exists"
     assert_true "command -v install_tmux >/dev/null" "install_tmux function exists"
+    assert_true "command -v install_node >/dev/null" "install_node function exists"
     assert_true "command -v check_and_install_tools >/dev/null" "check_and_install_tools function exists"
+}
+
+# Test install_node function behavior
+test_install_node() {
+    test_log "Testing install_node function..."
+
+    # Function is defined
+    assert_true "command -v install_node >/dev/null" "install_node: function is defined"
+
+    # When npm is already present, it should short-circuit and report success
+    # without calling any package manager. Mock npm onto PATH for the duration.
+    local tmpbin="/tmp/dotfiles_node_test_$(date +%s)"
+    mkdir -p "$tmpbin"
+    printf '#!/bin/sh\necho 1.0.0\n' > "$tmpbin/npm"
+    chmod +x "$tmpbin/npm"
+
+    local old_path="$PATH"
+    PATH="$tmpbin:$PATH"
+
+    local output
+    output=$(install_node 2>&1)
+    local rc=$?
+
+    PATH="$old_path"
+    rm -rf "$tmpbin"
+
+    assert_equals "0" "$rc" "install_node: returns 0 when npm already present"
+    assert_true "echo '$output' | grep -q 'already installed'" "install_node: skips install when npm present"
+    assert_false "echo '$output' | grep -qi 'apt_install\|dnf_install\|brew_install'" "install_node: does not invoke a package manager when npm present"
 }
 
 # Test environment variables
@@ -288,6 +328,9 @@ main_test() {
     echo
 
     test_installation_functions_structure
+    echo
+
+    test_install_node
     echo
 
     test_curl_retry

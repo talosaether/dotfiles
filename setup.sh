@@ -368,6 +368,25 @@ install_go() {
   success "go installed"
 }
 
+install_node() {
+  # Node.js + npm are needed for npm-distributed LSP servers and mason packages.
+  log "Ensuring Node.js + npm toolchain is installed..."
+  if command -v npm >/dev/null 2>&1; then
+    success "npm already installed ($(npm --version))"
+    return 0
+  fi
+
+  os="$(detect_os)"
+  case "$os" in
+    ubuntu)  apt_install nodejs && apt_install npm ;;
+    fedora)  dnf_install nodejs && dnf_install npm ;;
+    macos)   brew_install node ;;
+    freebsd) log "Installing node + npm via pkg..."; sudo pkg install -y node npm ;;
+    *)       warn "Unsupported OS for Node.js install; npm-based mason packages will fail until you install Node manually"; return 1 ;;
+  esac
+  success "Node.js + npm installed"
+}
+
 install_tree_sitter_cli() {
   # tree-sitter CLI is required by nvim-treesitter's main branch to compile parsers.
   log "Ensuring tree-sitter CLI is installed..."
@@ -613,6 +632,14 @@ check_and_install_tools() {
   else
     log "go not found; installing..."
     install_go || true
+  fi
+
+  # Node.js + npm (required for npm-distributed LSP servers / mason packages)
+  if command -v npm >/dev/null 2>&1; then
+    success "npm OK ($(npm --version))"
+  else
+    log "npm not found; installing..."
+    install_node || true
   fi
 
   # tree-sitter CLI (required by nvim-treesitter main branch to compile parsers)
