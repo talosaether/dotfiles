@@ -143,7 +143,7 @@ test_detect_os() {
     os_result=$(detect_os)
 
     assert_true "[ -n '$os_result' ]" "detect_os: returns non-empty result"
-    assert_true "[ '$os_result' = 'ubuntu' ] || [ '$os_result' = 'freebsd' ] || [ '$os_result' = 'linux' ] || [ '$os_result' = 'unknown' ]" "detect_os: returns valid OS type"
+    assert_true "[ '$os_result' = 'ubuntu' ] || [ '$os_result' = 'fedora' ] || [ '$os_result' = 'freebsd' ] || [ '$os_result' = 'linux' ] || [ '$os_result' = 'unknown' ]" "detect_os: returns valid OS type"
 }
 
 # Test utility functions exist
@@ -171,7 +171,7 @@ test_environment_variables() {
     assert_true "[ -n '$TARGET_HOME' ]" "TARGET_HOME is set"
 
     # Test default values
-    assert_equals "0.10.0" "$NVIM_VERSION" "NVIM_VERSION default value"
+    assert_equals "0.11.0" "$NVIM_VERSION" "NVIM_VERSION default value"
     assert_equals "appimage" "$NVIM_INSTALL_METHOD" "NVIM_INSTALL_METHOD default value"
     assert_equals "1" "$TMUX_INSTALL_TPM" "TMUX_INSTALL_TPM default value"
 }

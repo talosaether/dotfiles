@@ -22,6 +22,7 @@ detect_os() {
   case "$(uname -s)" in
     Linux*)
       if command -v apt-get >/dev/null 2>&1; then echo "ubuntu"
+      elif command -v dnf >/dev/null 2>&1; then echo "fedora"
       elif command -v pkg >/dev/null 2>&1; then echo "freebsd"
       else echo "linux"; fi
       ;;
@@ -140,6 +141,11 @@ apt_install() {
   sudo apt update && sudo apt install -y "$pkg"
 }
 
+dnf_install() {
+  pkg="$1"; log "Installing $pkg via dnf...";
+  sudo dnf install -y "$pkg"
+}
+
 brew_install() {
   pkg="$1"; log "Installing $pkg via Homebrew..."
 
@@ -165,6 +171,7 @@ pkg_install() {
   # ===== FORK: OS-specific package installation =====
   case "$os" in
     ubuntu)  apt_install "$pkg" ;;
+    fedora)  dnf_install "$pkg" ;;
     macos)   brew_install "$pkg" ;;
     freebsd) log "Installing $pkg via pkg..."; sudo pkg install -y "$pkg" ;;
     *)       error "Unsupported OS: $os"; return 1 ;;
@@ -264,6 +271,24 @@ install_nerd_fonts() {
       fi
       ;;
 
+    fedora)
+      log "Installing fira-code-fonts on Fedora..."
+      dnf_install fira-code-fonts
+      command -v unzip >/dev/null 2>&1 || dnf_install unzip
+      # Also install a Nerd Font variant
+      if [ ! -d "$TARGET_HOME/.local/share/fonts/NerdFonts" ]; then
+        run_as "mkdir -p ~/.local/share/fonts/NerdFonts"
+        log "Downloading FiraCode Nerd Font..."
+        curl_retry -Lo /tmp/FiraCode.zip https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/FiraCode.zip
+        run_as "unzip -q -o /tmp/FiraCode.zip -d ~/.local/share/fonts/NerdFonts/"
+        rm -f /tmp/FiraCode.zip
+        run_as "fc-cache -fv" >/dev/null 2>&1 || true
+        success "FiraCode Nerd Font installed"
+      else
+        warn "Nerd Fonts already installed; skipping"
+      fi
+      ;;
+
     macos)
       log "Installing font via Homebrew cask..."
       if ! brew list --cask font-fira-code-nerd-font >/dev/null 2>&1; then
@@ -321,6 +346,7 @@ install_go() {
   os="$(detect_os)"
   case "$os" in
     ubuntu)  apt_install golang-go ;;
+    fedora)  dnf_install golang ;;
     macos)   brew_install go ;;
     freebsd) log "Installing go via pkg..."; sudo pkg install -y go ;;
     *)       warn "Unsupported OS for Go install; mason gopls will fail until you install Go manually"; return 1 ;;
@@ -339,6 +365,7 @@ install_tree_sitter_cli() {
   os="$(detect_os)"
   case "$os" in
     ubuntu)  apt_install tree-sitter-cli ;;
+    fedora)  dnf_install tree-sitter-cli ;;
     macos)   brew_install tree-sitter ;;
     freebsd) log "Installing tree-sitter via pkg..."; sudo pkg install -y tree-sitter ;;
     *)       warn "Unsupported OS for tree-sitter install; nvim-treesitter parser builds will fail until you install it manually"; return 1 ;;
@@ -355,6 +382,11 @@ install_build_tools() {
     ubuntu)
       log "Installing build-essential on Ubuntu..."
       apt_install build-essential
+      ;;
+
+    fedora)
+      log "Installing Development Tools group on Fedora..."
+      sudo dnf group install -y development-tools || sudo dnf install -y gcc make
       ;;
 
     macos)
@@ -588,6 +620,14 @@ check_and_install_tools() {
         install_build_tools
       fi
       ;;
+    fedora)
+      if command -v gcc >/dev/null 2>&1 && command -v make >/dev/null 2>&1; then
+        success "Build tools OK"
+      else
+        log "Build tools not found; installing..."
+        install_build_tools
+      fi
+      ;;
     macos)
       if xcode-select -p >/dev/null 2>&1; then
         success "Xcode Command Line Tools OK"
@@ -608,7 +648,7 @@ check_and_install_tools() {
 
   # Nerd Fonts (required for nvim-web-devicons)
   case "$os" in
-    ubuntu|freebsd)
+    ubuntu|fedora|freebsd)
       if [ -d "$TARGET_HOME/.local/share/fonts/NerdFonts" ] || fc-list | grep -qi "nerd"; then
         success "Nerd Fonts installed"
       else
@@ -662,7 +702,7 @@ Options:
 
 Environment:
   REPLACE_CONFIGS     1 overwrite (default), 0 preserve
-  NVIM_VERSION        default: 0.10.0
+  NVIM_VERSION        default: 0.11.0
   NVIM_INSTALL_METHOD appimage (default) | package
   TMUX_INSTALL_TPM    1 install (default), 0 skip
   TARGET_USER         default: current user
