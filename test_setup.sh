@@ -1,7 +1,15 @@
 #!/bin/sh
 # Test suite for setup.sh
 
-# Override functions that require sudo to avoid permission issues
+# Source the setup script to access its functions.
+# SETUP_SH_SOURCED stops setup.sh from running main() (no real installs during tests);
+# set +e undoes setup.sh's `set -e` so a non-zero return doesn't abort the test run.
+SETUP_SH_SOURCED=1
+. ./setup.sh
+set +e
+
+# Override functions that require sudo/network AFTER sourcing, so these mocks
+# replace the real definitions instead of being clobbered by them.
 install_neovim() {
     echo "[MOCK] install_neovim called with NVIM_VERSION=$NVIM_VERSION"
     return 0
@@ -21,9 +29,6 @@ curl_retry() {
     echo "[MOCK] curl_retry called with args: $*"
     return 0
 }
-
-# Source the setup script to access functions (after our overrides)
-. ./setup.sh
 
 # Test framework
 TEST_COUNT=0

@@ -198,17 +198,28 @@ install_neovim() {
   # ===== END FORK =====
 
   if [ "${NVIM_INSTALL_METHOD}" = "appimage" ]; then
-    if [ "$(uname -m)" != "x86_64" ]; then
-      error "AppImage method needs x86_64; falling back to package manager"
+    # Neovim >=0.10.4 renamed AppImage assets from "nvim.appimage" to
+    # arch-specific "nvim-linux-<arch>.appimage".
+    case "$(uname -m)" in
+      x86_64)        nvim_asset="nvim-linux-x86_64.appimage" ;;
+      aarch64|arm64) nvim_asset="nvim-linux-arm64.appimage" ;;
+      *)             nvim_asset="" ;;
+    esac
+
+    if [ -z "$nvim_asset" ]; then
+      error "No AppImage for $(uname -m); falling back to package manager"
       pkg_install neovim "$os"
-    else
-      curl_retry -o /tmp/nvim.appimage \
-        "https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim.appimage"
+    elif curl_retry -o /tmp/nvim.appimage \
+        "https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/${nvim_asset}"; then
       chmod +x /tmp/nvim.appimage
       (cd /tmp && ./nvim.appimage --appimage-extract >/dev/null)
+      sudo rm -rf "/opt/nvim-v${NVIM_VERSION}"
       sudo mv /tmp/squashfs-root "/opt/nvim-v${NVIM_VERSION}"
       sudo ln -sf "/opt/nvim-v${NVIM_VERSION}/usr/bin/nvim" /usr/local/bin/nvim
       rm -f /tmp/nvim.appimage
+    else
+      warn "AppImage download failed; falling back to package manager"
+      pkg_install neovim "$os"
     fi
   else
     # ===== FORK: OS-specific package installation =====
@@ -227,7 +238,10 @@ install_neovim() {
     # ===== END FORK =====
   fi
 
-  if nvim --version | head -n1 | grep -q "NVIM v${NVIM_VERSION}"; then
+  if ! command -v nvim >/dev/null 2>&1; then
+    error "Neovim installation FAILED — nvim not found on PATH after install attempt"
+    return 1
+  elif nvim --version | head -n1 | grep -q "NVIM v${NVIM_VERSION}"; then
     success "Neovim v${NVIM_VERSION} installed"
   else
     warn "Neovim installed, but version differs: $(nvim --version | head -n1)"
@@ -669,8 +683,8 @@ check_and_install_tools() {
   # Neovim
   case $(check_app_version nvim "$NVIM_VERSION" "nvim --version | head -n1 | sed 's/.*v//'"; echo $?) in
     0) success "Neovim OK ($(nvim --version | head -n1))" ;;
-    1) log "Neovim not found; installing..."; install_neovim ;;
-    2) warn "Neovim below $NVIM_VERSION; upgrading..."; install_neovim ;;
+    1) log "Neovim not found; installing..."; install_neovim || warn "Neovim install incomplete; install manually (dnf/apt/brew install neovim)" ;;
+    2) warn "Neovim below $NVIM_VERSION; upgrading..."; install_neovim || warn "Neovim upgrade incomplete; install manually" ;;
   esac
 
   # tmux (+ TPM)
@@ -753,5 +767,9 @@ main() {
   success "Done."
 }
 
-main "$@"
+# Run main only when executed directly. Sourcing the script (e.g. test_setup.sh)
+# sets SETUP_SH_SOURCED=1 to load functions without performing any installation.
+if [ -z "${SETUP_SH_SOURCED:-}" ]; then
+  main "$@"
+fi
 
